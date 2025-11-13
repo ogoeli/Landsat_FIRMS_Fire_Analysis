@@ -1,0 +1,168 @@
+/**** Start of imports. If edited, may not auto-convert in the playground. ****/
+var geometry = 
+    /* color: #0b4a8b */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[-115.84368630968603, 49.470146876154715],
+          [-115.84368630968603, 49.44135771019656],
+          [-115.77141686998877, 49.44135771019656],
+          [-115.77141686998877, 49.470146876154715]]], null, false);
+/***** End of imports. If edited, may not auto-convert in the playground. *****/
+
+
+// // Get the last feature directly using the list index and its geomtry
+// var cali = ee.Feature(AOI.toList(AOI.size()).get(-1)).geometry();
+// print(cali, 'cali')
+
+// // get the last polygon to extract the date
+// var cali_2 = ee.Feature(AOI.toList(AOI.size()).get(-1));
+// print(cali_2, 'cali_2')
+
+// // Select a single property. date
+// var StartTime = cali_2.get('StartTime');
+// print('StartTime',StartTime);
+
+// var EndTime = cali_2.get('EndTime');
+// print('EndTime',EndTime);
+
+
+
+// get your landsat images
+var landsat8 = ee.ImageCollection("LANDSAT/LC08/C02/T1")
+  .filterBounds(geometry)  // Filter by the bounding box
+  .filterDate("2024-09-07", "2024-09-23")  // Filter by the start and end dates from FIRMS
+  .filter(ee.Filter.lt('CLOUD_COVER', 50))
+  //.sort('CLOUD_COVER')
+ .select(['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B10'])
+  //.median()
+  // .map(function(image) {
+  //   return image.clip(cali);
+  // });
+
+print(landsat8,'landsat8')
+
+var landsat_first = landsat8.first();
+
+Map.addLayer(landsat8.median(), {bands: ["B7", "B5", "B4"], min:500, max:45001}, 'landsat8')
+
+// sum the B7 and B10 AND GET GT 60K pixel
+var summedCollection = landsat8.map(function(image) {
+  var b7 = image.select('B7');
+  var b10 = image.select('B10');
+  var sum = b7.add(b10).rename('B7_plus_B10');
+  // Threshold the sum: values greater than 60,000 = fire, else no fire
+  var fireThreshold = b7.gt(4500).rename('fire');  // .gt() for greater than 60,000
+  
+  // Add the thresholded fire layer as a band
+  return image.addBands(fireThreshold);
+});
+
+print(summedCollection, 'sum')
+
+// select the first image in the collection
+var firstImage = ee.Image(summedCollection.first());
+Map.centerObject(geometry, 7);
+Map.addLayer(firstImage.select('fire'), {min: 0, max: 1}, 'fire pixels');
+
+
+
+
+
+
+
+
+
+
+
+
+// Map over the collection to find where B7 > 4500
+var b7Threshold = landsat8.map(function(img) {
+  var b7 = img.select('B7');  // Use the correct band name!
+  var mask = b7.gt(4500).selfMask();  // Mask all non-matching pixels
+  return img.updateMask(mask).set('system:time_start', img.date());  // Retain time info
+});
+
+// Get first image where any pixel in B7 > 4500
+var firstHit = b7Threshold.filter(ee.Filter.notNull(['B7'])).first();
+
+print('First image with B7 > 4500:', firstHit);
+
+// ✅ Check that firstHit exists
+firstHit.evaluate(function(img) {
+  if (img !== null) {
+    var image = ee.Image(img);
+    Map.centerObject(image, 10);
+    Map.addLayer(image.select('B7'), {min: 4500, max: 10000, palette: ['red', 'yellow']}, 'B7 > 4500');
+  } else {
+    print('❌ No image found where B7 > 4500.');
+  }
+});
+
+
+
+
+
+
+
+throw('stop')
+
+
+// get the firms bands for fire detection
+var firms = ee.ImageCollection('FIRMS')
+  .filterBounds(geometry)
+  .filterDate("2024-09-20", "2024-09-30")
+  .map(function(image) {
+    return image.clip(geometry);
+  });
+
+
+var fires = firms.select('T21'); // Clip to the study area
+
+// Assuming you have an ImageCollection named FIRMS
+var firmsSorted = fires.sort('system:time_start'); // Sort by date (ascending)
+print(firmsSorted, 'firmsSorted')
+
+
+// Select the first image
+var firstImage = firmsSorted.first();
+print(firstImage, 'first fires')
+
+
+var firesVis = {min: 325.0, max: 400.0, palette: ['red', 'orange', 'yellow'],};
+Map.addLayer(firmsSorted, firesVis, 'Fires');
+
+Map.addLayer(landsat8, {bands: ["B7", "B5", "B4"], min:500, max:45001}, 'landsat8')
+
+
+
+
+// get the firms bands for fire detection
+var firms = ee.ImageCollection('FIRMS')
+  .filterBounds(cali)
+  .filterDate("2021-08-02", "2021-08-21")
+  .map(function(image) {
+    return image.clip(cali);
+  });
+
+
+var fires = firms.select('T21'); // Clip to the study area
+
+// Assuming you have an ImageCollection named FIRMS
+var firmsSorted = fires.sort('system:time_start'); // Sort by date (ascending)
+print(firmsSorted, 'firmsSorted')
+
+
+// Select the first image
+var firstImage = firmsSorted.first();
+print(firstImage, 'first fires')
+
+
+var firesVis = {min: 325.0, max: 400.0, palette: ['red', 'orange', 'yellow'],};
+Map.addLayer(firmsSorted, firesVis, 'Fires');
+
+Map.addLayer(landsat8, {bands: ["B7", "B5", "B4"], min:500, max:45001}, 'landsat8')
+
